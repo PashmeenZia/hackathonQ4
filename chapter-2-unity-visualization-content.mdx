@@ -1,0 +1,999 @@
+import Head from '@docusaurus/Head';
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
+<Head>
+  <title>Unity for Human-Robot Interaction & Sensor Simulation | Digital Twin - Gazebo & Unity Simulation</title>
+  <meta name="description" content="Learn about Unity visualization for humanoid robots, including sensor simulation, human-robot interaction, and visualization techniques" />
+</Head>
+
+# Chapter 2 — Unity for Human-Robot Interaction & Sensor Simulation
+
+## Introduction
+
+Unity is a powerful 3D development platform that excels at creating high-fidelity visualizations and interactive experiences. For robotics applications, Unity provides an ideal environment for visualizing robot sensors, creating immersive human-robot interaction scenarios, and developing intuitive interfaces for robot teleoperation. This chapter explores how to leverage Unity's capabilities for humanoid robot simulation, focusing on sensor visualization and human-robot interaction.
+
+Unlike physics simulation in Gazebo, which emphasizes accurate physical behavior, Unity focuses on visual realism and user experience. This makes it perfect for creating intuitive interfaces that help humans understand what robots are perceiving and how they're interpreting their environment. For humanoid robots, Unity can visualize complex sensor data in ways that are easily interpretable by human operators.
+
+The combination of Gazebo for physics simulation and Unity for visualization creates a comprehensive digital twin environment where robots can be tested for both physical feasibility and human interaction. This dual approach allows developers to validate not just how robots move and behave, but also how they appear and interact from a human perspective.
+
+In this chapter, we'll cover the fundamentals of setting up Unity for robotics applications, implementing sensor visualization systems, and creating interactive environments that facilitate human-robot collaboration. By the end of this chapter, you'll be able to create Unity scenes that visualize robot sensors (LiDAR, cameras, IMUs) and allow basic interaction with simulated robots.
+
+## Setting Up Unity for Robotics Simulation
+
+To use Unity effectively for robotics simulation, you'll need to install specific packages and configure your project appropriately. The Unity Robotics Package provides essential tools for robotics development, including ROS integration, sensor simulation, and robot control interfaces.
+
+### Installing Unity and Required Packages
+
+First, install Unity Hub and Unity 2021.3 LTS or later (recommended for robotics applications). Then, create a new 3D project and install the following packages through the Package Manager (Window > Package Manager):
+
+1. **Unity Robotics Package** - Provides ROS integration and robotics-specific utilities
+2. **Universal Render Pipeline (URP)** - For optimized rendering performance
+3. **URDF Importer** - For importing robot models from URDF files
+4. **XR Interaction Toolkit** - For advanced interaction scenarios (optional)
+
+### Project Structure for Robotics
+
+Organize your Unity project with the following structure:
+```
+Assets/
+├── Robots/
+│   ├── Models/
+│   ├── Prefabs/
+│   └── Materials/
+├── Sensors/
+│   ├── LiDAR/
+│   ├── Cameras/
+│   └── IMU/
+├── Environments/
+│   ├── Scenes/
+│   └── Materials/
+├── Scripts/
+│   ├── RobotControl/
+│   ├── SensorVisualization/
+│   └── Interaction/
+└── Resources/
+    └── Config/
+```
+
+This structure keeps your robotics-specific assets organized and makes it easier to develop and maintain complex simulation environments.
+
+## Sensor Simulation in Unity
+
+Unity can simulate various types of robotic sensors, providing visual feedback that helps users understand what the robot is perceiving. The most common sensors for humanoid robots include LiDAR, cameras, and IMUs, each with specific visualization techniques.
+
+### LiDAR Simulation
+
+LiDAR (Light Detection and Ranging) sensors emit laser pulses and measure the time it takes for the light to return after hitting objects. In Unity, we can simulate LiDAR using raycasting techniques:
+
+```csharp
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class LiDARSimulation : MonoBehaviour
+{
+    [Header("LiDAR Configuration")]
+    public int numberOfRays = 360;
+    public float maxRange = 10.0f;
+    public float minRange = 0.1f;
+    public float rotationSpeed = 10.0f;
+
+    [Header("Visualization")]
+    public GameObject pointCloudPrefab;
+    public Material pointMaterial;
+
+    private List<GameObject> pointCloudObjects;
+    private LineRenderer lineRenderer;
+
+    void Start()
+    {
+        InitializeLiDAR();
+    }
+
+    void Update()
+    {
+        SimulateLiDARScan();
+    }
+
+    void InitializeLiDAR()
+    {
+        pointCloudObjects = new List<GameObject>();
+
+        // Create line renderer for visualization
+        lineRenderer = gameObject.AddComponent<LineRenderer>();
+        lineRenderer.material = pointMaterial;
+        lineRenderer.widthMultiplier = 0.02f;
+        lineRenderer.positionCount = numberOfRays;
+    }
+
+    void SimulateLiDARScan()
+    {
+        Vector3[] hitPoints = new Vector3[numberOfRays];
+
+        for (int i = 0; i < numberOfRays; i++)
+        {
+            float angle = (i * 360.0f / numberOfRays) * Mathf.Deg2Rad;
+            Vector3 direction = new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle));
+
+            RaycastHit hit;
+            Vector3 rayStart = transform.position;
+            Vector3 rayDirection = transform.TransformDirection(direction);
+
+            if (Physics.Raycast(rayStart, rayDirection, out hit, maxRange))
+            {
+                if (hit.distance >= minRange)
+                {
+                    hitPoints[i] = hit.point;
+
+                    // Optional: Create visual point for each hit
+                    if (i % 10 == 0) // Only create every 10th point to reduce overhead
+                    {
+                        CreateLiDARPoint(hit.point);
+                    }
+                }
+                else
+                {
+                    hitPoints[i] = rayStart + rayDirection * minRange;
+                }
+            }
+            else
+            {
+                hitPoints[i] = rayStart + rayDirection * maxRange;
+            }
+        }
+
+        lineRenderer.SetPositions(hitPoints);
+    }
+
+    void CreateLiDARPoint(Vector3 position)
+    {
+        GameObject point = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        point.transform.position = position;
+        point.transform.localScale = Vector3.one * 0.02f;
+        point.GetComponent<Renderer>().material = pointMaterial;
+        point.GetComponent<Collider>().enabled = false; // Disable collider to avoid physics interactions
+
+        pointCloudObjects.Add(point);
+
+        // Remove old points to prevent memory buildup
+        if (pointCloudObjects.Count > 1000)
+        {
+            GameObject oldPoint = pointCloudObjects[0];
+            pointCloudObjects.RemoveAt(0);
+            Destroy(oldPoint);
+        }
+    }
+}
+```
+
+This script creates a simulated LiDAR that performs raycasting in multiple directions and visualizes the returned points. The visualization shows both the ray paths and the points where objects were detected.
+
+### Camera Simulation
+
+Cameras are essential for visual perception in robotics. Unity can simulate both RGB cameras and depth cameras for humanoid robots:
+
+```csharp
+using UnityEngine;
+
+public class CameraSimulation : MonoBehaviour
+{
+    [Header("Camera Configuration")]
+    public Camera rgbCamera;
+    public Camera depthCamera;
+
+    [Header("Visualization")]
+    public Material depthMaterial;
+    public RenderTexture depthTexture;
+
+    [Header("Parameters")]
+    public float nearClip = 0.1f;
+    public float farClip = 10.0f;
+
+    void Start()
+    {
+        SetupCameras();
+    }
+
+    void SetupCameras()
+    {
+        // Configure RGB camera
+        if (rgbCamera == null)
+        {
+            rgbCamera = GetComponent<Camera>();
+        }
+
+        // Create depth camera
+        if (depthCamera == null)
+        {
+            GameObject depthCamObj = new GameObject("DepthCamera");
+            depthCamObj.transform.SetParent(transform);
+            depthCamObj.transform.localPosition = Vector3.zero;
+            depthCamObj.transform.localRotation = Quaternion.identity;
+
+            depthCamera = depthCamObj.AddComponent<Camera>();
+            depthCamera.CopyFrom(rgbCamera); // Copy settings from RGB camera
+        }
+
+        // Create depth texture
+        if (depthTexture == null)
+        {
+            depthTexture = new RenderTexture(640, 480, 24);
+            depthTexture.format = RenderTextureFormat.Depth;
+        }
+
+        depthCamera.targetTexture = depthTexture;
+        depthCamera.clearFlags = CameraClearFlags.SolidColor;
+        depthCamera.backgroundColor = Color.white;
+    }
+
+    // Method to get depth data
+    public float GetDepthAtScreenPoint(Vector2 screenPoint)
+    {
+        // Convert screen point to viewport coordinates
+        Vector2 viewportPoint = new Vector2(screenPoint.x / Screen.width, screenPoint.y / Screen.height);
+
+        // Sample depth texture
+        RenderTexture.active = depthTexture;
+        Texture2D depthSample = new Texture2D(1, 1);
+        depthSample.ReadPixels(new Rect(viewportPoint.x * depthTexture.width,
+                                       viewportPoint.y * depthTexture.height,
+                                       1, 1), 0, 0);
+        Color depthColor = depthSample.GetPixel(0, 0);
+        DestroyImmediate(depthSample);
+        RenderTexture.active = null;
+
+        // Convert color to depth value
+        float depthValue = depthColor.r;
+        return depthValue * (farClip - nearClip) + nearClip;
+    }
+}
+```
+
+This camera simulation provides both RGB and depth data, which are crucial for humanoid robots that need to perceive their environment visually.
+
+### IMU Simulation
+
+IMUs (Inertial Measurement Units) provide orientation and acceleration data. In Unity, we can simulate IMUs by tracking the robot's movement and applying realistic noise:
+
+```csharp
+using UnityEngine;
+
+public class IMUSimulation : MonoBehaviour
+{
+    [Header("IMU Configuration")]
+    public float accelerometerNoise = 0.01f;
+    public float gyroscopeNoise = 0.01f;
+    public float magnetometerNoise = 0.1f;
+
+    [Header("Visualization")]
+    public TextMesh orientationDisplay;
+
+    private Vector3 lastPosition;
+    private Quaternion lastRotation;
+    private Vector3 acceleration;
+    private Vector3 angularVelocity;
+
+    void Start()
+    {
+        lastPosition = transform.position;
+        lastRotation = transform.rotation;
+        acceleration = Vector3.zero;
+        angularVelocity = Vector3.zero;
+    }
+
+    void Update()
+    {
+        SimulateIMU();
+        UpdateVisualization();
+    }
+
+    void SimulateIMU()
+    {
+        // Calculate linear acceleration
+        Vector3 velocity = (transform.position - lastPosition) / Time.deltaTime;
+        Vector3 currentAcceleration = (velocity - acceleration) / Time.deltaTime;
+
+        // Add gravity to acceleration (assuming Z is up)
+        currentAcceleration += Physics.gravity;
+
+        // Apply noise to acceleration
+        currentAcceleration += Random.insideUnitSphere * accelerometerNoise;
+
+        // Calculate angular velocity
+        Quaternion deltaRotation = transform.rotation * Quaternion.Inverse(lastRotation);
+        Vector3 deltaAngle = new Vector3(
+            Mathf.Atan2(2 * (deltaRotation.x * deltaRotation.w + deltaRotation.y * deltaRotation.z),
+                        1 - 2 * (deltaRotation.z * deltaRotation.z + deltaRotation.w * deltaRotation.w)),
+            Mathf.Atan2(2 * (deltaRotation.y * deltaRotation.w - deltaRotation.z * deltaRotation.x),
+                        1 - 2 * (deltaRotation.y * deltaRotation.y + deltaRotation.x * deltaRotation.x)),
+            Mathf.Atan2(2 * (deltaRotation.z * deltaRotation.x + deltaRotation.y * deltaRotation.w),
+                        1 - 2 * (deltaRotation.y * deltaRotation.y + deltaRotation.z * deltaRotation.z))
+        );
+
+        Vector3 currentAngularVelocity = deltaAngle / Time.deltaTime;
+
+        // Apply noise to angular velocity
+        currentAngularVelocity += Random.insideUnitSphere * gyroscopeNoise;
+
+        // Store values
+        acceleration = currentAcceleration;
+        angularVelocity = currentAngularVelocity;
+        lastPosition = transform.position;
+        lastRotation = transform.rotation;
+    }
+
+    void UpdateVisualization()
+    {
+        if (orientationDisplay != null)
+        {
+            Vector3 eulerAngles = transform.rotation.eulerAngles;
+            orientationDisplay.text = $"Orientation: {eulerAngles.x:F2}, {eulerAngles.y:F2}, {eulerAngles.z:F2}\n" +
+                                    $"Accel: {acceleration.x:F3}, {acceleration.y:F3}, {acceleration.z:F3}\n" +
+                                    $"AngVel: {angularVelocity.x:F3}, {angularVelocity.y:F3}, {angularVelocity.z:F3}";
+        }
+    }
+
+    // Public methods to access IMU data
+    public Vector3 GetLinearAcceleration()
+    {
+        return acceleration;
+    }
+
+    public Vector3 GetAngularVelocity()
+    {
+        return angularVelocity;
+    }
+
+    public Quaternion GetOrientation()
+    {
+        return transform.rotation;
+    }
+}
+```
+
+This IMU simulation provides realistic orientation and acceleration data with appropriate noise levels, making it suitable for humanoid robot applications.
+
+## Creating Interactive Environments
+
+Unity excels at creating interactive environments where humans can work alongside robots. For humanoid robots, this includes creating intuitive interfaces for teleoperation, gesture recognition, and collaborative tasks.
+
+### Environment Setup
+
+Create a realistic environment for your humanoid robot:
+
+```csharp
+using UnityEngine;
+
+public class EnvironmentSetup : MonoBehaviour
+{
+    [Header("Environment Configuration")]
+    public GameObject[] obstacles;
+    public Material[] environmentMaterials;
+
+    [Header("Interactive Elements")]
+    public GameObject[] interactiveObjects;
+    public Material highlightMaterial;
+
+    void Start()
+    {
+        SetupEnvironment();
+        ConfigureInteractions();
+    }
+
+    void SetupEnvironment()
+    {
+        // Create a simple room environment
+        CreateRoom();
+
+        // Add obstacles
+        PlaceObstacles();
+
+        // Apply materials
+        ApplyEnvironmentMaterials();
+    }
+
+    void CreateRoom()
+    {
+        // Create floor
+        GameObject floor = GameObject.CreatePrimitive(PrimitiveType.Plane);
+        floor.transform.SetParent(transform);
+        floor.transform.localScale = Vector3.one * 10;
+        floor.name = "Floor";
+
+        // Create walls
+        CreateWalls();
+    }
+
+    void CreateWalls()
+    {
+        // Create four walls
+        for (int i = 0; i < 4; i++)
+        {
+            GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            wall.transform.SetParent(transform);
+
+            // Position walls to form a room
+            float angle = i * 90 * Mathf.Deg2Rad;
+            float distance = 10f / 2f;
+            wall.transform.position = new Vector3(
+                Mathf.Cos(angle) * distance,
+                2.5f,
+                Mathf.Sin(angle) * distance
+            );
+
+            // Rotate walls appropriately
+            wall.transform.rotation = Quaternion.Euler(0, angle, 0);
+            wall.transform.localScale = new Vector3(0.2f, 5f, 10f);
+            wall.name = $"Wall_{i}";
+
+            // Make walls static for better performance
+            wall.GetComponent<Collider>().isTrigger = false;
+        }
+    }
+
+    void PlaceObstacles()
+    {
+        // Randomly place obstacles in the environment
+        for (int i = 0; i < obstacles.Length; i++)
+        {
+            GameObject obstacle = Instantiate(obstacles[i]);
+            obstacle.transform.SetParent(transform);
+
+            // Random position within the room
+            Vector3 position = new Vector3(
+                Random.Range(-4f, 4f),
+                0.5f,
+                Random.Range(-4f, 4f)
+            );
+            obstacle.transform.position = position;
+
+            // Random rotation
+            obstacle.transform.rotation = Quaternion.Euler(0, Random.Range(0, 360), 0);
+        }
+    }
+
+    void ApplyEnvironmentMaterials()
+    {
+        // Apply materials to environment objects
+        Renderer[] renderers = GetComponentsInChildren<Renderer>();
+        foreach (Renderer renderer in renderers)
+        {
+            if (environmentMaterials.Length > 0)
+            {
+                renderer.material = environmentMaterials[Random.Range(0, environmentMaterials.Length)];
+            }
+        }
+    }
+
+    void ConfigureInteractions()
+    {
+        // Set up interaction components for objects
+        foreach (GameObject obj in interactiveObjects)
+        {
+            // Add interaction components
+            if (obj.GetComponent<Collider>() != null)
+            {
+                // Add outline or highlight effect for interactive objects
+                SetupInteractiveVisuals(obj);
+            }
+        }
+    }
+
+    void SetupInteractiveVisuals(GameObject obj)
+    {
+        // Add a highlight effect when the object is selected
+        // This could be a simple outline or change in material
+    }
+}
+```
+
+### Human-Robot Interaction
+
+Implement interaction mechanisms that allow humans to control or communicate with the humanoid robot:
+
+```csharp
+using UnityEngine;
+using UnityEngine.EventSystems;
+
+public class HumanRobotInteraction : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
+{
+    [Header("Interaction Configuration")]
+    public GameObject robot;
+    public float interactionDistance = 5.0f;
+
+    [Header("Control Modes")]
+    public bool enableTeleoperation = true;
+    public bool enableGestureControl = false;
+
+    private bool isInteracting = false;
+    private Vector3 interactionStartPos;
+
+    void Update()
+    {
+        HandleInteraction();
+    }
+
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        if (IsRobotInRange())
+        {
+            isInteracting = true;
+            interactionStartPos = Input.mousePosition;
+        }
+    }
+
+    public void OnPointerUp(PointerEventData eventData)
+    {
+        isInteracting = false;
+    }
+
+    void HandleInteraction()
+    {
+        if (!isInteracting) return;
+
+        if (enableTeleoperation)
+        {
+            HandleTeleoperation();
+        }
+
+        if (enableGestureControl)
+        {
+            HandleGestureControl();
+        }
+    }
+
+    bool IsRobotInRange()
+    {
+        if (robot == null) return false;
+
+        float distance = Vector3.Distance(transform.position, robot.transform.position);
+        return distance <= interactionDistance;
+    }
+
+    void HandleTeleoperation()
+    {
+        // Example: Move robot based on mouse movement
+        Vector3 mouseDelta = Input.mousePosition - interactionStartPos;
+
+        if (robot != null)
+        {
+            // Convert mouse movement to robot movement
+            Vector3 movement = new Vector3(mouseDelta.x * 0.01f, 0, mouseDelta.y * 0.01f);
+            robot.transform.Translate(movement, Space.World);
+        }
+    }
+
+    void HandleGestureControl()
+    {
+        // Example: Use mouse gestures to control robot actions
+        // This could involve recognizing specific patterns or movements
+    }
+
+    // Additional methods for different interaction modes
+    public void SendCommandToRobot(string command)
+    {
+        if (robot != null)
+        {
+            // Send command to robot (could be through ROS bridge or direct method call)
+            Debug.Log($"Sending command to robot: {command}");
+        }
+    }
+}
+```
+
+## Visualization Techniques for Sensor Data
+
+Effective visualization of sensor data is crucial for understanding robot perception. Unity provides several techniques for visualizing different types of sensor data:
+
+### LiDAR Point Cloud Visualization
+
+Create an optimized system for visualizing large point clouds:
+
+```csharp
+using UnityEngine;
+using System.Collections.Generic;
+
+public class PointCloudVisualizer : MonoBehaviour
+{
+    [Header("Point Cloud Configuration")]
+    public Material pointMaterial;
+    public float pointSize = 0.02f;
+    public int maxPoints = 10000;
+
+    [Header("Performance")]
+    public bool useGPUInstancing = true;
+
+    private List<Vector3> points;
+    private GameObject[] pointObjects;
+    private int pointCount = 0;
+
+    void Start()
+    {
+        points = new List<Vector3>();
+        pointObjects = new GameObject[maxPoints];
+    }
+
+    public void AddPoint(Vector3 point)
+    {
+        if (pointCount >= maxPoints)
+        {
+            // Remove oldest point
+            if (pointObjects[pointCount % maxPoints] != null)
+            {
+                DestroyImmediate(pointObjects[pointCount % maxPoints]);
+            }
+
+            // Add new point
+            points[pointCount % maxPoints] = point;
+            pointObjects[pointCount % maxPoints] = CreatePointObject(point);
+        }
+        else
+        {
+            points.Add(point);
+            pointObjects[pointCount] = CreatePointObject(point);
+        }
+
+        pointCount++;
+    }
+
+    GameObject CreatePointObject(Vector3 position)
+    {
+        GameObject point = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        point.transform.position = position;
+        point.transform.localScale = Vector3.one * pointSize;
+
+        Renderer renderer = point.GetComponent<Renderer>();
+        renderer.material = pointMaterial;
+
+        if (useGPUInstancing && pointMaterial.enableInstancing)
+        {
+            renderer.material.enableInstancing = true;
+        }
+
+        // Disable physics for visualization points
+        DestroyImmediate(point.GetComponent<Collider>());
+
+        return point;
+    }
+
+    public void ClearPoints()
+    {
+        for (int i = 0; i < pointObjects.Length; i++)
+        {
+            if (pointObjects[i] != null)
+            {
+                DestroyImmediate(pointObjects[i]);
+                pointObjects[i] = null;
+            }
+        }
+
+        points.Clear();
+        pointCount = 0;
+    }
+
+    // Method to update with new point cloud data
+    public void UpdatePointCloud(List<Vector3> newPoints)
+    {
+        ClearPoints();
+
+        foreach (Vector3 point in newPoints)
+        {
+            AddPoint(point);
+        }
+    }
+}
+```
+
+### Real-time Sensor Data Display
+
+Create a heads-up display (HUD) for showing real-time sensor data:
+
+```csharp
+using UnityEngine;
+using UnityEngine.UI;
+
+public class SensorDataHUD : MonoBehaviour
+{
+    [Header("HUD Elements")]
+    public Text positionText;
+    public Text orientationText;
+    public Text sensorStatusText;
+    public RawImage depthImage;
+
+    [Header("Robot Reference")]
+    public GameObject robot;
+
+    private Camera depthCamera;
+    private RenderTexture depthTexture;
+
+    void Start()
+    {
+        SetupHUD();
+    }
+
+    void Update()
+    {
+        UpdateHUD();
+    }
+
+    void SetupHUD()
+    {
+        // Initialize depth camera and texture if needed
+        SetupDepthVisualization();
+    }
+
+    void SetupDepthVisualization()
+    {
+        // Find depth camera on robot
+        if (robot != null)
+        {
+            depthCamera = robot.GetComponentInChildren<Camera>();
+            if (depthCamera == null)
+            {
+                // Try to find depth camera by tag or name
+                depthCamera = robot.transform.Find("DepthCamera")?.GetComponent<Camera>();
+            }
+
+            if (depthCamera != null)
+            {
+                depthTexture = depthCamera.targetTexture;
+                if (depthTexture != null && depthImage != null)
+                {
+                    depthImage.texture = depthTexture;
+                }
+            }
+        }
+    }
+
+    void UpdateHUD()
+    {
+        if (robot != null)
+        {
+            // Update position
+            if (positionText != null)
+            {
+                positionText.text = $"Position: {robot.transform.position.x:F2}, {robot.transform.position.y:F2}, {robot.transform.position.z:F2}";
+            }
+
+            // Update orientation
+            if (orientationText != null)
+            {
+                Vector3 eulerAngles = robot.transform.rotation.eulerAngles;
+                orientationText.text = $"Orientation: {eulerAngles.x:F2}°, {eulerAngles.y:F2}°, {eulerAngles.z:F2}°";
+            }
+
+            // Update sensor status
+            if (sensorStatusText != null)
+            {
+                // This would typically come from actual sensor data
+                sensorStatusText.text = "Sensors: Active | LiDAR: Online | Cameras: Online | IMU: Online";
+            }
+        }
+    }
+}
+```
+
+## Practical Exercise: Unity Sensor Visualization
+
+Let's create a complete scene that demonstrates sensor visualization for a humanoid robot:
+
+1. **Create the Robot**: Import or create a simple humanoid robot model
+2. **Add Sensors**: Attach LiDAR, camera, and IMU simulation scripts
+3. **Create Environment**: Set up a simple environment with obstacles
+4. **Implement Visualization**: Create visualizations for each sensor type
+5. **Add Interaction**: Implement basic interaction controls
+
+```csharp
+// Complete example script to tie everything together
+using UnityEngine;
+
+public class HumanoidRobotSimulation : MonoBehaviour
+{
+    [Header("Robot Configuration")]
+    public GameObject robot;
+    public Transform spawnPoint;
+
+    [Header("Sensor Systems")]
+    public LiDARSimulation lidar;
+    public CameraSimulation cameraSim;
+    public IMUSimulation imu;
+
+    [Header("Environment")]
+    public EnvironmentSetup environment;
+    public HumanRobotInteraction interaction;
+
+    [Header("Visualization")]
+    public SensorDataHUD hud;
+
+    void Start()
+    {
+        InitializeSimulation();
+    }
+
+    void InitializeSimulation()
+    {
+        // Spawn robot at designated location
+        if (robot != null && spawnPoint != null)
+        {
+            robot.transform.position = spawnPoint.position;
+            robot.transform.rotation = spawnPoint.rotation;
+        }
+
+        // Initialize all sensor systems
+        InitializeSensors();
+
+        // Setup environment
+        if (environment != null)
+        {
+            environment.transform.position = Vector3.zero;
+        }
+
+        // Setup interaction system
+        if (interaction != null)
+        {
+            interaction.robot = robot;
+        }
+
+        // Setup HUD
+        if (hud != null)
+        {
+            hud.robot = robot;
+        }
+    }
+
+    void InitializeSensors()
+    {
+        if (lidar != null)
+        {
+            lidar.transform.SetParent(robot.transform);
+            lidar.transform.localPosition = Vector3.zero; // Adjust as needed
+        }
+
+        if (cameraSim != null)
+        {
+            cameraSim.transform.SetParent(robot.transform);
+            cameraSim.transform.localPosition = Vector3.zero; // Adjust as needed
+        }
+
+        if (imu != null)
+        {
+            imu.transform.SetParent(robot.transform);
+            imu.transform.localPosition = Vector3.zero; // Adjust as needed
+        }
+    }
+
+    void Update()
+    {
+        // Main simulation update
+        UpdateSimulationStatus();
+    }
+
+    void UpdateSimulationStatus()
+    {
+        // Update simulation status display
+        // This could include performance metrics, sensor health, etc.
+    }
+}
+```
+
+## Performance Optimization for Lightweight Simulation
+
+Since the specification requires free-tier friendly and lightweight workflows, it's important to optimize Unity simulations:
+
+### Level of Detail (LOD) Systems
+```csharp
+using UnityEngine;
+
+public class RobotLODSystem : MonoBehaviour
+{
+    [Header("LOD Configuration")]
+    public float[] lodDistances = { 10f, 20f, 50f };
+    public GameObject[] lodModels;
+
+    private Camera mainCamera;
+
+    void Start()
+    {
+        mainCamera = Camera.main;
+        SetupLODModels();
+    }
+
+    void Update()
+    {
+        UpdateLOD();
+    }
+
+    void SetupLODModels()
+    {
+        // Ensure we have the correct number of LOD models
+        for (int i = 0; i < lodModels.Length; i++)
+        {
+            if (lodModels[i] != null)
+            {
+                lodModels[i].SetActive(i == 0); // Only first LOD active initially
+            }
+        }
+    }
+
+    void UpdateLOD()
+    {
+        if (mainCamera == null) return;
+
+        float distance = Vector3.Distance(mainCamera.transform.position, transform.position);
+
+        for (int i = 0; i < lodDistances.Length; i++)
+        {
+            if (distance <= lodDistances[i])
+            {
+                ActivateLOD(i);
+                return;
+            }
+        }
+
+        // If beyond all distances, activate the lowest detail LOD
+        ActivateLOD(lodDistances.Length);
+    }
+
+    void ActivateLOD(int lodIndex)
+    {
+        for (int i = 0; i < lodModels.Length; i++)
+        {
+            if (lodModels[i] != null)
+            {
+                lodModels[i].SetActive(i == lodIndex);
+            }
+        }
+    }
+}
+```
+
+### Occlusion Culling
+Unity's built-in occlusion culling system can significantly improve performance by not rendering objects that aren't visible to the camera.
+
+### Texture and Model Optimization
+- Use compressed textures (ASTC, ETC2, DXT)
+- Reduce polygon counts on models
+- Use texture atlasing to reduce draw calls
+- Implement object pooling for frequently created/destroyed objects
+
+## Troubleshooting Common Unity Simulation Issues
+
+### Performance Problems
+- **Reduce polygon count**: Simplify models, especially for distant objects
+- **Optimize lighting**: Use baked lighting instead of real-time where possible
+- **Limit sensor visualization**: Don't render every sensor point if not necessary
+- **Use object pooling**: Reuse objects instead of constantly creating/destroying them
+
+### Sensor Accuracy Issues
+- **Calibrate simulation parameters**: Ensure simulated sensors match real-world specifications
+- **Add appropriate noise**: Real sensors have noise; include this in simulation
+- **Validate against Gazebo**: Compare sensor outputs between Gazebo and Unity
+
+### Interaction Problems
+- **Check collision layers**: Ensure interaction objects have appropriate layer settings
+- **Verify raycast setup**: Make sure raycasts are configured correctly for interaction
+- **Test on different hardware**: Ensure interactions work across different performance levels
+
+## Summary
+
+In this chapter, we've explored how to use Unity for creating high-fidelity visualizations and interactive experiences for humanoid robots. We covered:
+
+1. **Unity setup for robotics**: Installing required packages and organizing project structure
+2. **Sensor simulation**: Implementing LiDAR, camera, and IMU simulations with realistic behavior
+3. **Interactive environments**: Creating spaces where humans can interact with robots
+4. **Visualization techniques**: Methods for displaying sensor data in intuitive ways
+5. **Performance optimization**: Ensuring lightweight simulations suitable for free-tier usage
+
+Unity's visualization capabilities complement Gazebo's physics simulation, creating a comprehensive digital twin environment for humanoid robots. This combination allows developers to test both the physical behavior and visual perception aspects of their robots in a unified framework.
+
+The key to effective Unity simulation is balancing visual fidelity with performance requirements. By implementing appropriate optimization techniques, you can create engaging and informative visualizations that run efficiently even on modest hardware.
+
+## Exercises
+
+1. Create a Unity scene with a humanoid robot that has LiDAR, camera, and IMU sensors, and implement visualization for each sensor type.
+
+2. Design an interactive environment where you can teleoperate the humanoid robot using mouse or keyboard controls.
+
+3. Implement a simple gesture recognition system that allows human operators to communicate commands to the robot.
+
+4. Optimize your Unity simulation for performance by implementing LOD systems and other optimization techniques.
